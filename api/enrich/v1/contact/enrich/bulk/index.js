@@ -1,6 +1,6 @@
 /**
  * POST /api/enrich/v1/contact/enrich/bulk
- * Start a bulk enrichment - with raw body forwarding
+ * Start a bulk enrichment - with debug mode
  */
 
 export const config = {
@@ -9,7 +9,6 @@ export const config = {
   },
 };
 
-// Helper to read raw body
 function getRawBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -32,38 +31,53 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  // Debug mode - return what we receive
+  if (req.query.debug === 'true') {
+    const rawBody = await getRawBody(req);
+    return res.status(200).json({
+      debug: true,
+      method: req.method,
+      headers: {
+        'content-type': req.headers['content-type'],
+        'content-length': req.headers['content-length'],
+        'authorization': req.headers.authorization ? 'Bearer ***' : 'missing',
+      },
+      bodyLength: rawBody.length,
+      bodyPreview: rawBody.substring(0, 500),
+      bodyFull: rawBody,
+    });
+  }
+
   const targetUrl = 'https://app.fullenrich.com/api/v1/contact/enrich/bulk';
 
   try {
-    // Read raw body
     const rawBody = await getRawBody(req);
 
-    console.log('=== PROXY DEBUG ===');
-    console.log('Raw body received:', rawBody);
-    console.log('Body length:', rawBody.length);
+    // If body is empty, return error with debug info
+    if (!rawBody || rawBody.length === 0) {
+      return res.status(400).json({
+        error: 'Empty body received by proxy',
+        debug: {
+          method: req.method,
+          contentType: req.headers['content-type'],
+          contentLength: req.headers['content-length'],
+        }
+      });
+    }
 
-    const fetchOptions = {
+    const response = await fetch(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'Authorization': req.headers.authorization || '',
       },
       body: rawBody,
-    };
+    });
 
-    if (req.headers.authorization) {
-      fetchOptions.headers['Authorization'] = req.headers.authorization;
-    }
-
-    console.log('Sending to FullEnrich...');
-    const response = await fetch(targetUrl, fetchOptions);
     const data = await response.json();
-
-    console.log('Response:', response.status, JSON.stringify(data));
-
     return res.status(response.status).json(data);
   } catch (error) {
-    console.error('Proxy error:', error);
     return res.status(500).json({ error: 'Proxy error', message: error.message });
   }
 }
