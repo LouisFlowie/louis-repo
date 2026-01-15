@@ -1,6 +1,9 @@
 /**
  * POST /api/enrich/v1/contact/enrich/bulk
+ * Using native https module for full control
  */
+
+import https from 'https';
 
 export const config = {
   api: {
@@ -21,6 +24,27 @@ function getRawBody(req) {
   });
 }
 
+function makeRequest(options, body) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        resolve({
+          status: res.statusCode,
+          data: data
+        });
+      });
+    });
+
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -31,31 +55,33 @@ export default async function handler(req, res) {
   }
 
   const rawBody = await getRawBody(req);
-  const targetUrl = 'https://app.fullenrich.com/api/v1/contact/enrich/bulk';
+
+  if (!rawBody || rawBody.length === 0) {
+    return res.status(400).json({
+      code: 'error.proxy.empty_body',
+      message: 'Proxy received empty body'
+    });
+  }
 
   try {
-    if (!rawBody || rawBody.length === 0) {
-      return res.status(400).json({
-        code: 'error.proxy.empty_body',
-        message: 'Proxy received empty body from Salesforce'
-      });
-    }
-
-    // Convert to Buffer to get exact byte length
     const bodyBuffer = Buffer.from(rawBody, 'utf-8');
 
-    const response = await fetch(targetUrl, {
+    const options = {
+      hostname: 'app.fullenrich.com',
+      port: 443,
+      path: '/api/v1/contact/enrich/bulk',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': bodyBuffer.length.toString(),
+        'Content-Length': bodyBuffer.length,
         'Accept': 'application/json',
         'Authorization': req.headers.authorization || '',
-      },
-      body: bodyBuffer,
-    });
+      }
+    };
 
-    const data = await response.json();
+    const response = await makeRequest(options, bodyBuffer);
+    const data = JSON.parse(response.data);
+
     return res.status(response.status).json(data);
   } catch (error) {
     return res.status(500).json({
