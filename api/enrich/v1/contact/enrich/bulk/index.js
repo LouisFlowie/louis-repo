@@ -1,6 +1,6 @@
 /**
  * POST /api/enrich/v1/contact/enrich/bulk
- * Using native https module for full control
+ * With proper User-Agent to avoid blocking
  */
 
 import https from 'https';
@@ -76,6 +76,7 @@ export default async function handler(req, res) {
         'Content-Length': bodyBuffer.length,
         'Accept': 'application/json',
         'Authorization': req.headers.authorization || '',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       }
     };
 
