@@ -4,6 +4,12 @@
  * to bypass User-Agent blocking
  */
 
+export const config = {
+  api: {
+    bodyParser: true,
+  },
+};
+
 export default async function handler(req, res) {
   // Enable CORS for Salesforce
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,7 +22,6 @@ export default async function handler(req, res) {
   }
 
   // Get the path after /api/enrich
-  // e.g., /api/enrich/v1/contact/enrich/bulk -> /v1/contact/enrich/bulk
   const path = req.url.replace('/api/enrich', '') || '';
   const targetUrl = `https://app.fullenrich.com/api${path}`;
 
@@ -36,11 +41,28 @@ export default async function handler(req, res) {
 
     // Forward body for POST/PUT requests
     if (req.method === 'POST' || req.method === 'PUT') {
-      fetchOptions.body = JSON.stringify(req.body);
+      // Handle body whether it's already parsed or raw string
+      let bodyToSend;
+      if (typeof req.body === 'string') {
+        bodyToSend = req.body;
+      } else if (req.body && typeof req.body === 'object') {
+        bodyToSend = JSON.stringify(req.body);
+      } else {
+        bodyToSend = '';
+      }
+      fetchOptions.body = bodyToSend;
+
+      // Debug log
+      console.log('Proxying to:', targetUrl);
+      console.log('Body:', bodyToSend);
     }
 
     const response = await fetch(targetUrl, fetchOptions);
     const data = await response.json();
+
+    // Debug log
+    console.log('Response status:', response.status);
+    console.log('Response data:', JSON.stringify(data));
 
     return res.status(response.status).json(data);
   } catch (error) {
