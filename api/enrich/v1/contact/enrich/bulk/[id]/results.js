@@ -1,9 +1,6 @@
 /**
  * GET /api/enrich/v1/contact/enrich/bulk/[id]/results
- * Using axios
  */
-
-import axios from 'axios';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -24,24 +21,20 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await axios.get(
+    const response = await fetch(
       `https://app.fullenrich.com/api/v1/contact/enrich/bulk/${id}/results`,
       {
         headers: {
           'Accept': 'application/json',
           'Authorization': req.headers.authorization || '',
         },
-        timeout: 30000,
       }
     );
 
-    return res.status(response.status).json(response.data);
+    const data = await response.json();
+    return res.status(response.status).json(data);
 
   } catch (error) {
-    if (error.response) {
-      return res.status(error.response.status).json(error.response.data);
-    }
-
     return res.status(500).json({
       code: 'error.proxy',
       message: error.message

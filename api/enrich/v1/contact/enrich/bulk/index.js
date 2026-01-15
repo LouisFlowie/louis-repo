@@ -1,9 +1,7 @@
 /**
  * POST /api/enrich/v1/contact/enrich/bulk
- * Using axios for reliable HTTP requests
+ * Simple proxy with bodyParser
  */
-
-import axios from 'axios';
 
 export const config = {
   api: {
@@ -12,6 +10,7 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -24,43 +23,46 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const body = req.body;
+
+  // Log what we receive
+  console.log('Received body type:', typeof body);
+  console.log('Received body:', JSON.stringify(body));
+
+  if (!body || !body.contacts) {
+    return res.status(400).json({
+      code: 'error.proxy.invalid_body',
+      message: 'Missing contacts in body'
+    });
+  }
+
   try {
-    const body = req.body;
+    // Re-stringify the parsed body
+    const jsonBody = JSON.stringify(body);
+    console.log('Sending to FullEnrich:', jsonBody);
 
-    if (!body || Object.keys(body).length === 0) {
-      return res.status(400).json({
-        code: 'error.proxy.empty_body',
-        message: 'Empty body received'
-      });
+    const response = await fetch('https://app.fullenrich.com/api/v1/contact/enrich/bulk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': req.headers.authorization || '',
+      },
+      body: jsonBody,
+    });
+
+    const responseText = await response.text();
+    console.log('FullEnrich response:', response.status, responseText);
+
+    try {
+      const data = JSON.parse(responseText);
+      return res.status(response.status).json(data);
+    } catch {
+      return res.status(response.status).send(responseText);
     }
-
-    console.log('Sending to FullEnrich:', JSON.stringify(body));
-
-    const response = await axios.post(
-      'https://app.fullenrich.com/api/v1/contact/enrich/bulk',
-      body,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': req.headers.authorization || '',
-        },
-        timeout: 30000,
-      }
-    );
-
-    console.log('FullEnrich response:', response.status, JSON.stringify(response.data));
-
-    return res.status(response.status).json(response.data);
 
   } catch (error) {
-    if (error.response) {
-      // FullEnrich returned an error
-      console.log('FullEnrich error:', error.response.status, JSON.stringify(error.response.data));
-      return res.status(error.response.status).json(error.response.data);
-    }
-
-    console.error('Proxy error:', error.message);
+    console.error('Fetch error:', error);
     return res.status(500).json({
       code: 'error.proxy',
       message: error.message
