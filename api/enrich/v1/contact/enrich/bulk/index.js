@@ -31,15 +31,6 @@ export default async function handler(req, res) {
   }
 
   const rawBody = await getRawBody(req);
-
-  // Debug mode - return as error so Salesforce displays it
-  if (req.query.debug === 'true') {
-    return res.status(400).json({
-      code: 'debug.info',
-      message: `DEBUG - Body length: ${rawBody.length} | Body: ${rawBody.substring(0, 300)}`
-    });
-  }
-
   const targetUrl = 'https://app.fullenrich.com/api/v1/contact/enrich/bulk';
 
   try {
@@ -50,14 +41,18 @@ export default async function handler(req, res) {
       });
     }
 
+    // Convert to Buffer to get exact byte length
+    const bodyBuffer = Buffer.from(rawBody, 'utf-8');
+
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Content-Length': bodyBuffer.length.toString(),
         'Accept': 'application/json',
         'Authorization': req.headers.authorization || '',
       },
-      body: rawBody,
+      body: bodyBuffer,
     });
 
     const data = await response.json();
