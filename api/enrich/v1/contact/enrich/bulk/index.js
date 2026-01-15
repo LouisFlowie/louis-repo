@@ -1,6 +1,5 @@
 /**
  * POST /api/enrich/v1/contact/enrich/bulk
- * Start a bulk enrichment - with debug mode
  */
 
 export const config = {
@@ -31,37 +30,23 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Debug mode - return what we receive
+  const rawBody = await getRawBody(req);
+
+  // Debug mode - return as error so Salesforce displays it
   if (req.query.debug === 'true') {
-    const rawBody = await getRawBody(req);
-    return res.status(200).json({
-      debug: true,
-      method: req.method,
-      headers: {
-        'content-type': req.headers['content-type'],
-        'content-length': req.headers['content-length'],
-        'authorization': req.headers.authorization ? 'Bearer ***' : 'missing',
-      },
-      bodyLength: rawBody.length,
-      bodyPreview: rawBody.substring(0, 500),
-      bodyFull: rawBody,
+    return res.status(400).json({
+      code: 'debug.info',
+      message: `DEBUG - Body length: ${rawBody.length} | Body: ${rawBody.substring(0, 300)}`
     });
   }
 
   const targetUrl = 'https://app.fullenrich.com/api/v1/contact/enrich/bulk';
 
   try {
-    const rawBody = await getRawBody(req);
-
-    // If body is empty, return error with debug info
     if (!rawBody || rawBody.length === 0) {
       return res.status(400).json({
-        error: 'Empty body received by proxy',
-        debug: {
-          method: req.method,
-          contentType: req.headers['content-type'],
-          contentLength: req.headers['content-length'],
-        }
+        code: 'error.proxy.empty_body',
+        message: 'Proxy received empty body from Salesforce'
       });
     }
 
@@ -78,6 +63,9 @@ export default async function handler(req, res) {
     const data = await response.json();
     return res.status(response.status).json(data);
   } catch (error) {
-    return res.status(500).json({ error: 'Proxy error', message: error.message });
+    return res.status(500).json({
+      code: 'error.proxy',
+      message: error.message
+    });
   }
 }
