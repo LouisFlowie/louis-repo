@@ -1,6 +1,9 @@
 {
   "name": "fullenrich-proxy",
   "version": "1.0.0",
-  "description": "Proxy for FullEnrich API to bypass Salesforce User-Agent blocking",
-  "private": true
+  "description": "Proxy for FullEnrich API",
+  "private": true,
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
 }

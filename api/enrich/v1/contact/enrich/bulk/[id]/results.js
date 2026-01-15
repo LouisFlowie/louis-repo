@@ -1,29 +1,9 @@
 /**
  * GET /api/enrich/v1/contact/enrich/bulk/[id]/results
- * With proper User-Agent
+ * Using axios
  */
 
-import https from 'https';
-
-function makeRequest(options) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => {
-        data += chunk;
-      });
-      res.on('end', () => {
-        resolve({
-          status: res.statusCode,
-          data: data
-        });
-      });
-    });
-
-    req.on('error', reject);
-    req.end();
-  });
-}
+import axios from 'axios';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -36,24 +16,32 @@ export default async function handler(req, res) {
 
   const { id } = req.query;
 
+  if (!id || id === 'null') {
+    return res.status(400).json({
+      code: 'error.invalid_id',
+      message: 'Invalid enrichment ID'
+    });
+  }
+
   try {
-    const options = {
-      hostname: 'app.fullenrich.com',
-      port: 443,
-      path: `/api/v1/contact/enrich/bulk/${id}/results`,
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': req.headers.authorization || '',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    const response = await axios.get(
+      `https://app.fullenrich.com/api/v1/contact/enrich/bulk/${id}/results`,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': req.headers.authorization || '',
+        },
+        timeout: 30000,
       }
-    };
+    );
 
-    const response = await makeRequest(options);
-    const data = JSON.parse(response.data);
+    return res.status(response.status).json(response.data);
 
-    return res.status(response.status).json(data);
   } catch (error) {
+    if (error.response) {
+      return res.status(error.response.status).json(error.response.data);
+    }
+
     return res.status(500).json({
       code: 'error.proxy',
       message: error.message

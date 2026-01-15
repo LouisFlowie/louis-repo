@@ -1,49 +1,15 @@
 /**
  * POST /api/enrich/v1/contact/enrich/bulk
- * With proper User-Agent to avoid blocking
+ * Using axios for reliable HTTP requests
  */
 
-import https from 'https';
+import axios from 'axios';
 
 export const config = {
   api: {
-    bodyParser: false,
+    bodyParser: true,
   },
 };
-
-function getRawBody(req) {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', chunk => {
-      data += chunk;
-    });
-    req.on('end', () => {
-      resolve(data);
-    });
-    req.on('error', reject);
-  });
-}
-
-function makeRequest(options, body) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => {
-        data += chunk;
-      });
-      res.on('end', () => {
-        resolve({
-          status: res.statusCode,
-          data: data
-        });
-      });
-    });
-
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
-}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -54,37 +20,47 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const rawBody = await getRawBody(req);
-
-  if (!rawBody || rawBody.length === 0) {
-    return res.status(400).json({
-      code: 'error.proxy.empty_body',
-      message: 'Proxy received empty body'
-    });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const bodyBuffer = Buffer.from(rawBody, 'utf-8');
+    const body = req.body;
 
-    const options = {
-      hostname: 'app.fullenrich.com',
-      port: 443,
-      path: '/api/v1/contact/enrich/bulk',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': bodyBuffer.length,
-        'Accept': 'application/json',
-        'Authorization': req.headers.authorization || '',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    if (!body || Object.keys(body).length === 0) {
+      return res.status(400).json({
+        code: 'error.proxy.empty_body',
+        message: 'Empty body received'
+      });
+    }
+
+    console.log('Sending to FullEnrich:', JSON.stringify(body));
+
+    const response = await axios.post(
+      'https://app.fullenrich.com/api/v1/contact/enrich/bulk',
+      body,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': req.headers.authorization || '',
+        },
+        timeout: 30000,
       }
-    };
+    );
 
-    const response = await makeRequest(options, bodyBuffer);
-    const data = JSON.parse(response.data);
+    console.log('FullEnrich response:', response.status, JSON.stringify(response.data));
 
-    return res.status(response.status).json(data);
+    return res.status(response.status).json(response.data);
+
   } catch (error) {
+    if (error.response) {
+      // FullEnrich returned an error
+      console.log('FullEnrich error:', error.response.status, JSON.stringify(error.response.data));
+      return res.status(error.response.status).json(error.response.data);
+    }
+
+    console.error('Proxy error:', error.message);
     return res.status(500).json({
       code: 'error.proxy',
       message: error.message
